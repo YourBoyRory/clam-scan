@@ -17,4 +17,4 @@ sudo chmod 600 /root/auto-clamscan-config.json
 
 echo "Install Done!"
 echo "Add the following line to roots crontab:"
-echo "0 0 * * 0 /usr/local/bin/auto-clamscan --config=/root/auto-clamscan-config.json"
+echo "0 2 * * 0 /usr/local/bin/auto-clamscan --config=/root/auto-clamscan-config.json"
