@@ -76,7 +76,7 @@ class ClamScan:
                 "virus_report", os.path.dirname(log_path)+"/virus_report.{date}.log"
             ).replace("{date}", str(date.today()))
         ))
-        infected_count = -1
+        infected_count = "infection(s)"
         error_message = ""
 
         print(cmd)
@@ -93,21 +93,25 @@ class ClamScan:
             print(line, end="")
             if "Infected files:" in line:
                 try:
-                    infected_count = int(line.split(':')[1])
+                    infected_count = line.split(':')[1].strip()
+                    if int(infected_count) < 2:
+                        infected_count += " infection"
+                    else: infected_count += "infections"
+                    print(infected_count)
                 except Exception as e:
-                    error_message += f"Issue getting infected count: {e}\n"
-                    pass
+                    error_message += f"{e}"
+
         for line in process.stderr:
             error_message += f"{line}"
 
-        process.wait()
+        exit_code = process.wait()
 
         no_log_warn="No log stored."
         switches = ['--app-icon=clamav']
-        if infected_count > 0:
+        if exit_code == 1:
             switches += ['--icon=security-low', '--urgency=critical']
             title = "Possible Infection Detected!"
-            message =  f"{scan_occurnace.title()} scan found {infected_count} infections."
+            message =  f"{scan_occurnace.title()} scan found {infected_count}."
             if log_path != "" and virus_report != "":
                 try:
                     self.copy_latest_log(log_path, virus_report)
@@ -123,8 +127,8 @@ class ClamScan:
                 notify = (True, None)
                 log_message = no_log_warn
                 message += no_log_warn + " Enable logging to save virus report."
-        elif infected_count == 0:
-            switches += ['--icon=security-high', '-e']
+        elif exit_code == 0:
+            switches += ['--icon=security-high']
             title = f"{scan_occurnace.title()} scan found no infections."
             message = f"Nothing to report from {scan_occurnace} scan."
             if log_path != "":
