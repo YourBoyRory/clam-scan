@@ -8,22 +8,7 @@ from datetime import date, datetime
 class ClamScan:
     def __init__(self, scan_config = {}):
 
-        # Get clamscan EXE
-        clam_exe = scan_config.get(
-            "clam_exe", "/usr/bin/clamdscan"
-        )
-        cmd = [clam_exe]
-
-        # get custom options
-        clamscan_option = scan_config.get(
-            "clamscan_option", [
-                "--fdpass",
-                "--multiscan"
-            ]
-        )
-        cmd += clamscan_option
-
-
+        # Notification settings
         notify_send_exe = scan_config.get(
             "notify_send_exe", "/usr/bin/notify-send"
         )
@@ -34,34 +19,25 @@ class ClamScan:
         notify_clean = scan_config.get(
             "notify_clean", False
         )
-
         # Scan occuance, This does nothing other then change the word used in the nofication.
-        scan_occurnace = scan_config.get(
-            "scan_occurnace", "last"
+        scan_name = scan_config.get(
+            "scan_name", "last"
         ).lower()
 
-        # Get directories
-        dirs = scan_config.get(
-            "scan_directories", ["~/"]
+
+        # Get clamscan EXE
+        cmd = [scan_config.get(
+            "clam_exe", "/usr/bin/clamdscan"
+        )]
+        # get custom options
+        cmd += ["--fdpass", "--multiscan"]
+        cmd += scan_config.get(
+            "clamscan_options", []
         )
-        scan_directories = [os.path.expanduser(d) for d in dirs]
-        if scan_directories != []:
-            cmd += (['-r'] + scan_directories)
-        dirs = scan_config.get(
-            "exclude_directories", []
-        )
-        exclude_directories = [os.path.expanduser(d) for d in dirs]
-        for directories in exclude_directories:
-            cmd += (['--exclude-dir='+directories])
-        files = scan_config.get(
-            "ignore_files", []
-        )
-        ignore_files = [os.path.expanduser(f) for f in files]
-        for file in ignore_files:
-            cmd += (['--exclude='+file])
+
 
         # Set Log paths
-        if scan_occurnace != "last": default_log = scan_occurnace+"_scan.log"
+        if scan_name != "last": default_log = scan_name+"_scan.log"
         else: default_log = "scan.log"
         log_path =  str(os.path.expanduser(
             scan_config.get(
@@ -76,7 +52,15 @@ class ClamScan:
                 "virus_report", os.path.dirname(log_path)+"/virus_report.{date}.log"
             ).replace("{date}", str(date.today()))
         ))
-        infected_count = "infection(s)"
+
+        # Get directories
+        dirs = scan_config.get(
+            "scan_directories", ["~/"]
+        )
+        cmd += [os.path.expanduser(d) for d in dirs]
+
+        infected_text = "infection(s)"
+        infected_count = -1
         error_message = ""
 
         print(cmd)
@@ -93,15 +77,14 @@ class ClamScan:
             print(line, end="")
             if "Infected files:" in line:
                 try:
-                    infected_count = line.split(':')[1].strip()
-                    if int(infected_count) < 2:
-                        infected_count += " infection"
-                    else: infected_count += "infections"
-                    print(infected_count)
+                    infected_count = int(line.split(':')[1].strip())
+                    if infected_count == 1: infected_text = f"{infected_count} infection"
+                    else: infected_text = f"{infected_count} infections"
                 except Exception as e:
                     error_message += f"{e}"
 
         for line in process.stderr:
+            print(line, end="")
             error_message += f"{line}"
 
         exit_code = process.wait()
@@ -111,7 +94,7 @@ class ClamScan:
         if exit_code == 1:
             switches += ['--icon=security-low', '--urgency=critical']
             title = "Possible Infection Detected!"
-            message =  f"{scan_occurnace.title()} scan found {infected_count}."
+            message =  f"{scan_name.title()} scan found {infected_text}."
             if log_path != "" and virus_report != "":
                 try:
                     self.copy_latest_log(log_path, virus_report)
@@ -127,10 +110,11 @@ class ClamScan:
                 notify = (True, None)
                 log_message = no_log_warn
                 message += no_log_warn + " Enable logging to save virus report."
-        elif exit_code == 0:
+        elif exit_code == 0 or infected_count == 0:
             switches += ['--icon=security-high']
-            title = f"{scan_occurnace.title()} scan found no infections."
-            message = f"Nothing to report from {scan_occurnace} scan."
+            title = f"{scan_name.title()} scan found no infections."
+            if exit_code != 0: message = f"Something went wrong with the {scan_name} scan. {error_message}"
+            else: message = f"Nothing to report from {scan_name} scan."
             if log_path != "":
                 switches += ['-A', 'View Results']
                 log_message = f"See {log_path} for scan results."
@@ -140,7 +124,7 @@ class ClamScan:
                 notify = (notify_clean, None)
         else:
             switches += ['--icon=security-medium','--urgency=critical']
-            title = f"Something went wrong with the {scan_occurnace} scan."
+            title = f"Something went wrong with the {scan_name} scan."
             if log_path != "":
                 switches += ['-A', 'View Results']
                 message = error_message

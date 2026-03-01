@@ -1,11 +1,12 @@
 {
     "log_path": "/var/log/clamav/last_scan.log",
     "notify_clean": true,
-    "scan_occurnace": "weekly",
+    "scan_name": "weekly",
     "scan_directories": [
-        "/usr",
-        "/opt",
-        "/mnt",
-        "/tmp"
+        "/home/",
+        "/mnt/",
+        "/opt/",
+        "/usr/",
+        "/var/lib/"
     ]
 }
