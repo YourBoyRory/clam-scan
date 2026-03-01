@@ -3,9 +3,9 @@
     "notify_clean": true,
     "scan_name": "weekly",
     "scan_directories": [
-        "/home/",
-        "/opt/",
         "/usr/",
-        "/var/lib/"
+        "/opt/",
+        "/var/lib/",
+        "/home/"
     ]
 }
