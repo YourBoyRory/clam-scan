@@ -10,9 +10,19 @@ class ClamScan:
 
         # Get clamscan EXE
         clam_exe = scan_config.get(
-            "clam_exe", "/usr/bin/clamscan"
+            "clam_exe", "/usr/bin/clamdscan"
         )
         cmd = [clam_exe]
+
+        # get custom options
+        clamscan_option = scan_config.get(
+            "clamscan_option", [
+                "--fdpass",
+                "--multiscan"
+            ]
+        )
+        cmd += clamscan_option
+
 
         notify_send_exe = scan_config.get(
             "notify_send_exe", "/usr/bin/notify-send"
@@ -23,11 +33,6 @@ class ClamScan:
         # If set, then you will be notifed when the scan is clean
         notify_clean = scan_config.get(
             "notify_clean", False
-        )
-
-        # If set, then it will make sure anothing scan isnt in progress
-        check_already_scanning = scan_config.get(
-            "check_already_scanning", True
         )
 
         # Scan occuance, This does nothing other then change the word used in the nofication.
@@ -55,16 +60,12 @@ class ClamScan:
         for file in ignore_files:
             cmd += (['--exclude='+file])
 
-        # get custom options
-        clamscan_option = scan_config.get(
-            "clamscan_option", []
-        )
-        cmd += clamscan_option
-
         # Set Log paths
+        if scan_occurnace != "last": default_log = scan_occurnace+"_scan.log"
+        else: default_log = "scan.log"
         log_path =  str(os.path.expanduser(
             scan_config.get(
-                "log_path", "~/.local/state/clamav/logs/scan.log"
+                "log_path", f"~/.local/state/clamav/logs/{default_log}"
             ).replace("{date}", str(date.today()))
         ))
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
