@@ -5,19 +5,6 @@ import shutil
 import os
 from datetime import date, datetime
 
-scan_config = {
-    "clam_exe": "/usr/bin/clamscan",
-    "log_path": "/var/log/clamav/last_scan.log",
-    "notify_clean": True,
-    "scan_occurnace": "weekly",
-    "scan_directories": [
-        "/usr",
-        "/opt",
-        "/mnt",
-        "/tmp",
-    ],
-}
-
 class ClamScan:
     def __init__(self, scan_config = {}):
 
@@ -26,6 +13,12 @@ class ClamScan:
             "clam_exe", "/usr/bin/clamscan"
         )
         cmd = [clam_exe]
+
+        notify_send_exe = scan_config.get(
+            "notify_send_exe", "/usr/bin/notify-send"
+        )
+        if not isinstance(notify_send_exe, list):
+            notify_send_exe = [notify_send_exe]
 
         # If set, then you will be notifed when the scan is clean
         notify_clean = scan_config.get(
@@ -157,12 +150,12 @@ class ClamScan:
         print("\n\n"+title)
         print(message, log_message)
         if notify[0]:
-            result = self.__sendNotification(title, message, switches)
+            result = self.__sendNotification(notify_send_exe, title, message, switches)
             if result.stdout == b"0\n":
                 subprocess.run(['xdg-open', notify[1]])
 
-    def __sendNotification(self, title, message, switches=[]):
-        return subprocess.run(['notify-send'] + switches + ['-a', 'ClamAV', f"{title}", f"{message}"], capture_output=True)
+    def __sendNotification(self, notify_send_exe, title, message, switches=[]):
+        return subprocess.run(notify_send_exe + switches + ['-a', 'ClamAV', f"{title}", f"{message}"], capture_output=True)
 
 
     def copy_latest_log(self, log_path, virus_report, marker=None):
