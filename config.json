@@ -4,7 +4,6 @@
     "scan_name": "weekly",
     "scan_directories": [
         "/home/",
-        "/mnt/",
         "/opt/",
         "/usr/",
         "/var/lib/"

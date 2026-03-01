@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-# Install Script
+### Install Script ###
 sudo cp ./Clam-Scan.py /usr/local/bin/auto-clamscan
 sudo chmod 755 /usr/local/bin/auto-clamscan
 sudo cp ./config.json /tmp/auto-clamscan-config.json
+# This set the current user as the user who will recive noticiations from root
 sudo jq --arg user "$USER" --arg display "$DISPLAY" --arg dbus_address "$DBUS_SESSION_BUS_ADDRESS"  \
    '.notify_send_exe = [
       "sudo",
@@ -17,7 +18,7 @@ sudo rm /tmp/auto-clamscan-config.json
 sudo chmod 600 /root/auto-clamscan-config.json
 
 
-# Install cron job
+### Install cron job ###
 cron_line="0 2 * * 0 /usr/local/bin/auto-clamscan --config=/root/auto-clamscan-config.json"
 
 sudo crontab -l > current_jobs.txt
