@@ -1,12 +1,19 @@
 {
-    "scan_name": "weekly",
-    "log_path": "/var/log/clamav/last_scan.log",
-    "scan_directories": [
-        "/home/rory/test"
-    ],
-    "notification_config": {
-        "notify_clean": true,
-        "notify_user": "rory",
-        "default_display": ":0"
+    "quarantine_config": {
+        "auto_quarantine": false,
+        "quarantine_directory": "/root/.auto-clamscan/quarantine"
+    },
+    "scan_config": {
+        "scan_name": "weekly",
+        "log_path": "/var/log/clamav/last_scan.log",
+        "scan_directories": [
+            "/usr/",
+            "/opt/",
+            "/var/lib/",
+            "/home/"
+        ],
+        "notification_config": {
+            "notify_clean": true
+        }
     }
 }
