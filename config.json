@@ -1,11 +1,12 @@
 {
-    "log_path": "/var/log/clamav/last_scan.log",
-    "notify_clean": true,
     "scan_name": "weekly",
+    "log_path": "/var/log/clamav/last_scan.log",
     "scan_directories": [
-        "/usr/",
-        "/opt/",
-        "/var/lib/",
-        "/home/"
-    ]
+        "/home/rory/test"
+    ],
+    "notification_config": {
+        "notify_clean": true,
+        "notify_user": "rory",
+        "default_display": ":0"
+    }
 }

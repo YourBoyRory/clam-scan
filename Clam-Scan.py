@@ -2,68 +2,68 @@
 
 import subprocess
 import shutil
+import pwd
 import os
 from datetime import date, datetime
 
 class ClamScan:
-    def __init__(self, scan_config = {}):
 
-        # Notification settings
-        notify_send_exe = scan_config.get(
-            "notify_send_exe", "/usr/bin/notify-send"
-        )
-        if not isinstance(notify_send_exe, list):
-            notify_send_exe = [notify_send_exe]
+    config = {}
 
-        # If set, then you will be notifed when the scan is clean
-        notify_clean = scan_config.get(
-            "notify_clean", False
-        )
-        # Scan occuance, This does nothing other then change the word used in the nofication.
+    def __init__(self, config = {}):
+        self.config = config
+
+    def quarantine(self, filePath, quarantine_config = None):
+        if quarantine_config == None:
+            quarantine_config = self.config.get("quarantine_config", {})
+
+        quarantine_config.get("quarantine_config", {})
+
+
+    def scanNow(self, scan_config = None):
+        if scan_config == None:
+            scan_config = self.config.get("scan_config", {})
+
+        # Get clamscan EXE
+        cmd = [scan_config.get("clam_exe", "/usr/bin/clamdscan")]
+        # get custom options
+        cmd += ["--fdpass", "--multiscan"]
+        cmd += scan_config.get("clamscan_options", [])
+
+        # This mess is to set Log paths
         scan_name = scan_config.get(
             "scan_name", "last"
         ).lower()
-
-
-        # Get clamscan EXE
-        cmd = [scan_config.get(
-            "clam_exe", "/usr/bin/clamdscan"
-        )]
-        # get custom options
-        cmd += ["--fdpass", "--multiscan"]
-        cmd += scan_config.get(
-            "clamscan_options", []
-        )
-
-
-        # Set Log paths
         if scan_name != "last": default_log = scan_name+"_scan.log"
         else: default_log = "scan.log"
-        log_path =  str(os.path.expanduser(
+        log_path = str(os.path.expanduser(
             scan_config.get(
                 "log_path", f"~/.local/state/clamav/logs/{default_log}"
             ).replace("{date}", str(date.today()))
         ))
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        if log_path != "":
-            cmd += ["--log="+log_path]
+        scan_config['log_path'] = log_path
         virus_report = str(os.path.expanduser(
             scan_config.get(
                 "virus_report", os.path.dirname(log_path)+"/virus_report.{date}.log"
             ).replace("{date}", str(date.today()))
         ))
+        scan_config['virus_report'] = virus_report
+        if log_path != "" and virus_report != "":
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            cmd += ["--log="+log_path]
+        else:
+            raise ValueError("Log paths must not be empty")
 
         # Get directories
         dirs = scan_config.get(
-            "scan_directories", ["~/"]
+            "scan_directories", ["~/test"]
         )
         cmd += [os.path.expanduser(d) for d in dirs]
 
-        infected_text = "infection(s)"
-        infected_count = -1
-        error_message = ""
-
-        print(cmd)
+        # Start Scan
+        self.scan_config = scan_config
+        scan_results = {}
+        error_messages = ""
 
         process = subprocess.Popen(
             cmd,
@@ -72,82 +72,148 @@ class ClamScan:
             text=True
         )
 
-
         for line in process.stdout:
             print(line, end="")
             if "Infected files:" in line:
                 try:
-                    infected_count = int(line.split(':')[1].strip())
-                    if infected_count == 1: infected_text = f"{infected_count} infection"
-                    else: infected_text = f"{infected_count} infections"
+                    scan_results['infected_count'] = int(line.split(':')[1].strip())
                 except Exception as e:
-                    error_message += f"{e}"
+                    error_messages += f"{e}"
 
         for line in process.stderr:
             print(line, end="")
-            error_message += f"{line}"
+            error_messages += f"{line}"
 
-        exit_code = process.wait()
+        scan_results['exit_code'] = process.wait()
+        scan_results['scan_name'] = scan_name
+        if error_messages != "":
+            scan_results['error_messages'] = error_messages
 
-        no_log_warn="No log stored."
-        switches = ['--app-icon=clamav']
+        self.__process_results(scan_config, scan_results)
+
+    def __process_results(self, scan_config, scan_results):
+
+        # Get log paths
+        log_path = scan_config['log_path']
+        virus_report = scan_config['virus_report']
+        results_path = log_path
+
+        # Get results
+        scan_name = scan_results.get("scan_name", "last").lower()
+        exit_code = scan_results.get("exit_code", -1)
+        error_messages = scan_results.get("error_messages", "An unknown error has occured.")
+        infected_count = scan_results.get("infected_count", -1)
+        if infected_count == 1: infected_text = f"{infected_count} infection"
+        elif infected_count < 0: infected_text = f"infection(s)"
+        else: infected_text = f"{infected_count} infections"
+
+        # Get Notification config
+        notification_config = {}
+        notification_config['env'] = scan_config.get("notification_config", {})
+        notify_clean = notification_config['env'].get(
+            "notify_clean", True
+        )
+
         if exit_code == 1:
-            switches += ['--icon=security-low', '--urgency=critical']
-            title = "Possible Infection Detected!"
-            message =  f"{scan_name.title()} scan found {infected_text}."
-            if log_path != "" and virus_report != "":
-                try:
-                    self.copy_latest_log(log_path, virus_report)
-                    log_message = f" See {virus_report} for virus report."
-                    switches += ['-A', 'View Virus Report']
-                    notify = (True, virus_report)
-                except Exception as e:
-                    message += f"\nCan't write virus report: {e}. You can View Results instead."
-                    log_message = f"See {log_path} for scan results."
-                    switches += ['-A', 'View Results']
-                    notify = (True, None)
-            else:
-                notify = (True, None)
-                log_message = no_log_warn
-                message += no_log_warn + " Enable logging to save virus report."
+            notification_config['enable_notify'] = True
+            notification_config['notification_switches'] = ['--icon=security-low', '--urgency=critical']
+            notification_config['notification_title'] = "Possible Infection Detected!"
+            notification_config['notification_message'] =  f"{scan_name.title()} scan found {infected_text}. "
+            try:
+                self.__copy_latest_log(log_path, virus_report)
+                notification_config['notification_switches'] += ['-A', 'View Virus Report']
+                results_path = virus_report
+            except Exception as e:
+                notification_config['notification_switches'] += ['-A', 'View Results']
+                notification_config['notification_message'] += f"\nCan't write virus report: {e}. You can View Results instead."
         elif exit_code == 0 or infected_count == 0:
-            switches += ['--icon=security-high']
-            title = f"{scan_name.title()} scan found no infections."
-            if exit_code != 0: message = f"Something went wrong with the {scan_name} scan. {error_message}"
-            else: message = f"Nothing to report from {scan_name} scan."
-            if log_path != "":
-                switches += ['-A', 'View Results']
-                log_message = f"See {log_path} for scan results."
-                notify = (notify_clean, log_path)
-            else:
-                log_message = no_log_warn
-                notify = (notify_clean, None)
+            notification_config['enable_notify'] = notify_clean
+            notification_config['notification_switches'] = ['--icon=security-high', '-A', 'View Results']
+            notification_config['notification_title'] = f"{scan_name.title()} scan found no infections."
+            if exit_code != 0: notification_config['notification_message'] = f"Something went wrong with the {scan_name} scan. \n{error_messages}"
+            else: notification_config['notification_message'] = f"Nothing to report from {scan_name} scan."
         else:
-            switches += ['--icon=security-medium','--urgency=critical']
-            title = f"Something went wrong with the {scan_name} scan."
-            if log_path != "":
-                switches += ['-A', 'View Results']
-                message = error_message
-                log_message = f"See {log_path} for more info"
-                notify = (True, log_path)
-            else:
-                log_message = no_log_warn
-                message = no_log_warn + " Enable logging to learn more."
-                notify = (True, None)
+            notification_config['enable_notify'] = True
+            notification_config['notification_switches'] = ['--icon=security-medium','--urgency=critical', '-A', 'View Results']
+            notification_config['notification_title'] = f"Something went wrong with the {scan_name} scan."
+            notification_config['notification_message'] = f"{error_messages}"
 
-
-        print("\n\n"+title)
-        print(message, log_message)
-        if notify[0]:
-            result = self.__sendNotification(notify_send_exe, title, message, switches)
+        print("\n\n"+notification_config['notification_title'])
+        print(notification_config['notification_message'])
+        print(f"See {results_path} for scan results.")
+        if notification_config['enable_notify']:
+            result = self.__sendNotification(notification_config)
             if result.stdout == b"0\n":
-                subprocess.run(['xdg-open', notify[1]])
+                subprocess.run(['xdg-open', results_path])
 
-    def __sendNotification(self, notify_send_exe, title, message, switches=[]):
-        return subprocess.run(notify_send_exe + switches + ['-a', 'ClamAV', f"{title}", f"{message}"], capture_output=True)
+    def __sendNotification(self, notification_config = {}):
 
 
-    def copy_latest_log(self, log_path, virus_report, marker=None):
+
+        # Notification Display
+        title = notification_config.get("notification_title", "")
+        message = notification_config.get("notification_message", "")
+        switches = notification_config.get("notification_switches", "")
+
+         # Notification Env
+        notification_env = notification_config.get("env",{})
+        default_display = notification_env.get("default_display", ":0")
+        username = notification_env.get("notify_user", None)
+        notify_send_exe = notification_env.get("notify_send_exe", "/usr/bin/notify-send")
+        if not isinstance(notify_send_exe, list):
+            notify_send_exe = [notify_send_exe]
+
+        defaults = notify_send_exe + switches + ['--app-icon=clamav', '-a', 'ClamAV', f"{title}", f"{message}"]
+
+        try:
+            if username == None:
+                base_path = "/run/user"
+                for entry in os.listdir(base_path):
+                    full_path = os.path.join(base_path, entry)
+                    dbus_address = f"unix:path={full_path}/bus"
+                    if entry.isdigit() and os.path.isdir(full_path):
+                        uid = int(entry)
+                        username = pwd.getpwuid(uid).pw_name
+                        env = [
+                            "sudo",
+                            "-u",
+                            username,
+                            f"DISPLAY={default_display}",
+                            f"DBUS_SESSION_BUS_ADDRESS={dbus_address}",
+                        ]
+                        result = subprocess.run(env + defaults, capture_output=True)
+                        if result.returncode == 0:
+                            print(f"Successfuly notified user: {username}:{uid}")
+                            return result
+                if result.returncode == None:
+                    print("No users found to notify.")
+                    return subprocess.run(defaults, capture_output=True)
+            else:
+                # User was Provided
+                uid = pwd.getpwnam(username).pw_uid
+                dbus_address = f"unix:path=/run/user/{uid}/bus"
+                env = [
+                    "sudo",
+                    "-u",
+                    username,
+                    f"DISPLAY={default_display}",
+                    f"DBUS_SESSION_BUS_ADDRESS={dbus_address}",
+                ]
+                result = subprocess.run(env + defaults, capture_output=True)
+                if result.returncode == 0:
+                    print(f"Successfuly forced notification to: {username}:{uid}")
+                    return result
+                else:
+                    print(f"{username}:{uid} not found to notify.")
+                    return subprocess.run(defaults, capture_output=True)
+        except Exception as e:
+            # If we cant find a currently logged in user, just attempt to send it without a env..
+            print("Failed to invoke env:", e)
+            return subprocess.run(defaults, capture_output=True)
+
+
+    def __copy_latest_log(self, log_path, virus_report, marker=None):
+
         if marker == None:
             marker = "-------------------------------------------------------------------------------\n"
         last_pos = 0
@@ -190,6 +256,7 @@ if __name__ == "__main__":
             scan_config = json.load(f)
     else: scan_config = {}
 
-    ClamScan(scan_config)
+    clamScan = ClamScan()
+    clamScan.scanNow(scan_config)
 
 
